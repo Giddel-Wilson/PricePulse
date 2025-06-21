@@ -340,10 +340,11 @@
 			<div class="bg-white rounded-lg shadow p-6 mb-8">
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+						<label for="price-search" class="block text-sm font-medium text-gray-700 mb-2">Search</label>
 						<div class="relative">
 							<Search class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
 							<Input
+								id="price-search"
 								type="text"
 								placeholder="Search products, markets, vendors..."
 								bind:value={searchQuery}
@@ -353,8 +354,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+						<label for="status-filter" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
 						<Select 
+							id="status-filter"
 							bind:value={statusFilter}
 							options={[
 								{ value: 'ALL', label: 'All Status' },
@@ -366,8 +368,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+						<label for="category-filter" class="block text-sm font-medium text-gray-700 mb-2">Category</label>
 						<Select 
+							id="category-filter"
 							bind:value={categoryFilter}
 							options={[
 								{ value: 'ALL', label: 'All Categories' },
@@ -377,8 +380,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+						<label for="sort-by" class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
 						<Select 
+							id="sort-by"
 							bind:value={sortBy}
 							options={[
 								{ value: 'createdAt', label: 'Date' },
@@ -391,8 +395,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Order</label>
+						<label for="sort-order" class="block text-sm font-medium text-gray-700 mb-2">Order</label>
 						<Select 
+							id="sort-order"
 							bind:value={sortOrder}
 							options={[
 								{ value: 'desc', label: 'Newest First' },

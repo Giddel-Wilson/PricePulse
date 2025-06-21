@@ -279,10 +279,11 @@
 			<div class="bg-white rounded-lg shadow p-6 mb-8">
 				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Search Users</label>
+						<label for="user-search" class="block text-sm font-medium text-gray-700 mb-2">Search Users</label>
 						<div class="relative">
 							<Search class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
 							<Input
+								id="user-search"
 								type="text"
 								placeholder="Search by name or email..."
 								bind:value={searchQuery}
@@ -292,8 +293,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Filter by Role</label>
+						<label for="role-filter" class="block text-sm font-medium text-gray-700 mb-2">Filter by Role</label>
 						<Select 
+							id="role-filter"
 							bind:value={roleFilter}
 							options={[
 								{ value: 'ALL', label: 'All Roles' },
@@ -305,8 +307,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
+						<label for="status-filter-users" class="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
 						<Select 
+							id="status-filter-users"
 							bind:value={statusFilter}
 							options={[
 								{ value: 'ALL', label: 'All Status' },
