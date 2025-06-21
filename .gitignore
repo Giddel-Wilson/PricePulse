@@ -22,19 +22,12 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Test files
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
-test/
-tests/
-*_cookies.txt
-cookies.txt
-debug-*.js
+# Test and debug files
+check-db.js
+create-pending-*.js
 test-*.js
-create-*.js
-get-admin-token.js
+static/test-*.html
+static/debug-*.html
 
 # Prisma
 /generated/prisma
