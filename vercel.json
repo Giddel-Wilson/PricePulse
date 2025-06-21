@@ -4,9 +4,13 @@
       "ENABLE_VC_BUILD": "1"
     }
   },
+  "buildCommand": "bun run build",
+  "installCommand": "bun install",
   "functions": {
     "src/routes/api/**/*.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "regions": ["iad1"],
+  "framework": "sveltekit"
 }
