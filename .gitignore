@@ -1,0 +1,40 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+test/
+tests/
+*_cookies.txt
+cookies.txt
+debug-*.js
+test-*.js
+create-*.js
+get-admin-token.js
+
+# Prisma
+/generated/prisma

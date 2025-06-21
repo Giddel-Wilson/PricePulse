@@ -1,0 +1,182 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(USER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  priceEntries PriceEntry[]
+  notifications Notification[]
+  
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  products  Product[]
+  
+  @@map("categories")
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  name       String
+  categoryId String   @map("category_id")
+  unit       String   // e.g., "per bag", "per kg", "per piece"
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  priceEntries PriceEntry[]
+  
+  @@map("products")
+}
+
+model Market {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  region    String   // state/region
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  priceEntries PriceEntry[]
+  
+  @@map("markets")
+}
+
+model PriceEntry {
+  id          String      @id @default(cuid())
+  productId   String      @map("product_id")
+  marketId    String      @map("market_id")
+  price       Float
+  unit        String      // can override product unit if needed
+  submittedBy String      @map("submitted_by")
+  status      EntryStatus @default(PENDING)
+  notes       String?     // admin notes or vendor comments
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  // Relations
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  market      Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [submittedBy], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+  
+  @@map("price_entries")
+}
+
+model Attachment {
+  id           String     @id @default(cuid())
+  priceEntryId String     @map("price_entry_id")
+  fileUrl      String     @map("file_url")
+  fileName     String     @map("file_name")
+  fileType     String     @map("file_type")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  
+  // Relations
+  priceEntry   PriceEntry @relation(fields: [priceEntryId], references: [id], onDelete: Cascade)
+  
+  @@map("attachments")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String   // 'price_approved', 'price_rejected', etc.
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  data      Json?    // additional data like price entry id, etc.
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+enum UserRole {
+  USER
+  VENDOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum EntryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model VendorRequest {
+  id          String        @id @default(cuid())
+  email       String
+  message     String?
+  status      RequestStatus @default(PENDING)
+  adminNotes  String?       @map("admin_notes")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  reviewedAt  DateTime?     @map("reviewed_at")
+  reviewedBy  String?       @map("reviewed_by")
+  canRequestAgainAt DateTime? @map("can_request_again_at")
+  
+  @@unique([email])
+  @@map("vendor_requests")
+}
+
+model ContactMessage {
+  id          String                @id @default(cuid())
+  name        String
+  email       String
+  subject     String
+  message     String
+  status      ContactMessageStatus  @default(UNREAD)
+  adminNotes  String?               @map("admin_notes")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  readAt      DateTime?             @map("read_at")
+  repliedAt   DateTime?             @map("replied_at")
+  
+  @@map("contact_messages")
+}
+
+enum ContactMessageStatus {
+  UNREAD
+  READ
+  REPLIED
+  ARCHIVED
+}
