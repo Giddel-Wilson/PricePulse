@@ -2,14 +2,17 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
-	import { TrendingUp, Plus, Clock, CheckCircle, XCircle, Eye } from 'lucide-svelte';
+	import { notifications } from '$lib/stores/notifications';
+	import { TrendingUp, Plus, Clock, CheckCircle, XCircle, Eye, Edit, X } from 'lucide-svelte';
 	import Button from '$lib/components/Button.svelte';
+	import Input from '$lib/components/Input.svelte';
+	import Select from '$lib/components/Select.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { formatPrice, formatDateTime } from '$lib/utils';
 	import type { PriceEntryWithDetails } from '$lib/types';
 
 	let userEntries: PriceEntryWithDetails[] = $state([]);
-	let notifications: any[] = $state([]);
+	let userNotifications: any[] = $state([]);
 	let stats = $state({
 		total: 0,
 		pending: 0,
@@ -18,6 +21,17 @@
 	});
 	let isLoading = $state(true);
 	let unreadCount = $state(0);
+
+	// Edit modal state
+	let showEditModal = $state(false);
+	let editingEntry: any = $state(null);
+	let editForm = $state({
+		price: '',
+		unit: '',
+		notes: ''
+	});
+	let editErrors: Record<string, string> = $state({});
+	let isUpdating = $state(false);
 
 	onMount(async () => {
 		// Check authentication
@@ -34,7 +48,7 @@
 
 		await Promise.all([
 			loadUserEntries(),
-			loadNotifications()
+			loadUserNotifications()
 		]);
 	});
 
@@ -66,13 +80,13 @@
 		}
 	}
 
-	async function loadNotifications() {
+	async function loadUserNotifications() {
 		try {
 			const response = await fetch('/api/notifications?limit=10');
 			const result = await response.json();
 
 			if (result.success && result.data) {
-				notifications = result.data.notifications || [];
+				userNotifications = result.data.notifications || [];
 				unreadCount = result.data.unreadCount || 0;
 			}
 		} catch (error) {
@@ -92,7 +106,7 @@
 
 			if (response.ok) {
 				// Update local state
-				notifications = notifications.map(n => 
+				userNotifications = userNotifications.map(n => 
 					n.id === notificationId ? { ...n, read: true } : n
 				);
 				unreadCount = Math.max(0, unreadCount - 1);
@@ -123,6 +137,71 @@
 			case 'PENDING':
 			default:
 				return 'text-yellow-600 bg-yellow-100';
+		}
+	}
+
+	function openEditModal(entry: any) {
+		editingEntry = entry;
+		editForm = {
+			price: entry.price.toString(),
+			unit: entry.unit,
+			notes: entry.notes || ''
+		};
+		editErrors = {};
+		showEditModal = true;
+	}
+
+	function closeEditModal() {
+		showEditModal = false;
+		editingEntry = null;
+		editForm = { price: '', unit: '', notes: '' };
+		editErrors = {};
+	}
+
+	async function handleEditSubmit(event: Event) {
+		event.preventDefault();
+		editErrors = {};
+		
+		// Validation
+		if (!editForm.price || isNaN(Number(editForm.price)) || Number(editForm.price) <= 0) {
+			editErrors.price = 'Valid price is required';
+		}
+		if (!editForm.unit) {
+			editErrors.unit = 'Unit is required';
+		}
+
+		if (Object.keys(editErrors).length > 0) {
+			return;
+		}
+
+		try {
+			isUpdating = true;
+
+			const response = await fetch(`/api/prices/${editingEntry.id}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					price: Number(editForm.price),
+					unit: editForm.unit,
+					notes: editForm.notes || null
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				notifications.success('Price entry updated successfully! It will be reviewed by an admin.');
+				closeEditModal();
+				await loadUserEntries(); // Reload entries
+			} else {
+				notifications.error(result.error || 'Failed to update price entry');
+			}
+		} catch (error) {
+			notifications.error('Network error. Please try again.');
+		} finally {
+			isUpdating = false;
 		}
 	}
 </script>
@@ -251,6 +330,9 @@
 									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 										Notes
 									</th>
+									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+										Actions
+									</th>
 								</tr>
 							</thead>
 							<tbody class="bg-white divide-y divide-gray-200">
@@ -320,6 +402,21 @@
 												<span class="text-xs text-gray-400">No notes</span>
 											{/if}
 										</td>
+										<td class="px-6 py-4 whitespace-nowrap">
+											{#if (entry as any).status === 'PENDING'}
+												<Button
+													size="sm"
+													variant="outline"
+													onclick={() => openEditModal(entry)}
+													class="flex items-center space-x-1"
+												>
+													<Edit class="w-4 h-4" />
+													<span>Edit</span>
+												</Button>
+											{:else}
+												<span class="text-xs text-gray-400">Cannot edit</span>
+											{/if}
+										</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -338,7 +435,7 @@
 			</div>
 
 			<!-- Notifications Section -->
-			{#if notifications.length > 0}
+			{#if userNotifications.length > 0}
 				<div class="bg-white rounded-lg shadow mb-8">
 					<div class="px-6 py-4 border-b border-gray-200">
 						<div class="flex items-center justify-between">
@@ -354,7 +451,7 @@
 					</div>
 
 					<div class="divide-y divide-gray-200">
-						{#each notifications.slice(0, 5) as notification}
+						{#each userNotifications.slice(0, 5) as notification}
 							<div class="p-6 {notification.read ? 'bg-white' : 'bg-blue-50'}" 
 								 onclick={() => !notification.read && markNotificationAsRead(notification.id)}
 								 onkeydown={(e) => e.key === 'Enter' && !notification.read && markNotificationAsRead(notification.id)}
@@ -401,10 +498,10 @@
 						{/each}
 					</div>
 
-					{#if notifications.length > 5}
+					{#if userNotifications.length > 5}
 						<div class="px-6 py-4 bg-gray-50 border-t">
 							<p class="text-sm text-gray-600">
-								Showing 5 of {notifications.length} notifications.
+								Showing 5 of {userNotifications.length} notifications.
 							</p>
 						</div>
 					{/if}
@@ -413,3 +510,80 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Edit Price Modal -->
+{#if showEditModal}
+	<div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+		<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-medium text-gray-900">Edit Price Entry</h3>
+				<button onclick={closeEditModal} class="text-gray-400 hover:text-gray-600">
+					<X class="w-6 h-6" />
+				</button>
+			</div>
+
+			{#if editingEntry}
+				<div class="mb-4">
+					<p class="text-sm text-gray-600">
+						<strong>Product:</strong> {editingEntry.product.name}
+					</p>
+					<p class="text-sm text-gray-600">
+						<strong>Market:</strong> {editingEntry.market.name}
+					</p>
+				</div>
+
+				<form onsubmit={handleEditSubmit} class="space-y-4">
+					<Input
+						label="Price"
+						type="number"
+						step="0.01"
+						min="0"
+						bind:value={editForm.price}
+						error={editErrors.price}
+						placeholder="Enter price"
+						required
+					/>
+
+					<Select
+						label="Unit"
+						bind:value={editForm.unit}
+						error={editErrors.unit}
+						options={[
+							{ value: 'kg', label: 'per kg' },
+							{ value: 'ltr', label: 'per ltr' },
+							{ value: 'piece', label: 'per piece' },
+							{ value: 'bag', label: 'per bag' },
+							{ value: 'bundle', label: 'per bundle' },
+							{ value: 'carton', label: 'per carton' },
+							{ value: 'dozen', label: 'per dozen' }
+						]}
+						required
+					/>
+
+					<Input
+						label="Notes (Optional)"
+						type="text"
+						bind:value={editForm.notes}
+						placeholder="Additional notes about this price update..."
+					/>
+
+					<div class="flex justify-end space-x-3 pt-4">
+						<Button
+							type="button"
+							variant="outline"
+							onclick={closeEditModal}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="submit"
+							loading={isUpdating}
+						>
+							Update Price
+						</Button>
+					</div>
+				</form>
+			{/if}
+		</div>
+	</div>
+{/if}

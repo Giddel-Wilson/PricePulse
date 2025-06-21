@@ -15,7 +15,7 @@ export const PATCH = async ({ params, request, cookies }: RequestEvent) => {
 		}
 
 		const { id } = params;
-		const { status, notes } = await request.json();
+		const { status, notes, price, unit } = await request.json();
 
 		// Only admins can approve/reject prices, or vendors can edit their own pending submissions
 		const entry = await prisma.priceEntry.findUnique({
@@ -43,12 +43,39 @@ export const PATCH = async ({ params, request, cookies }: RequestEvent) => {
 		}
 
 		// Update entry
+		const updateData: any = {};
+		
+		// Admin updates (status and notes)
+		if (isAdmin && status) {
+			updateData.status = status;
+		}
+		if (notes !== undefined) {
+			updateData.notes = notes;
+		}
+		
+		// Vendor updates (price and unit for PENDING entries)
+		if (isOwner && entry.status === 'PENDING') {
+			if (price !== undefined) {
+				updateData.price = price;
+			}
+			if (unit !== undefined) {
+				updateData.unit = unit;
+			}
+			// Reset to PENDING when vendor updates (in case admin had made changes)
+			updateData.status = 'PENDING';
+			updateData.updatedAt = new Date();
+		}
+
+		if (Object.keys(updateData).length === 0) {
+			return json(
+				{ success: false, error: 'No valid updates provided' },
+				{ status: 400 }
+			);
+		}
+
 		const updatedEntry = await prisma.priceEntry.update({
 			where: { id },
-			data: {
-				...(status && { status }),
-				...(notes !== undefined && { notes })
-			},
+			data: updateData,
 			include: {
 				product: {
 					include: {
@@ -97,6 +124,45 @@ export const PATCH = async ({ params, request, cookies }: RequestEvent) => {
 				});
 			} catch (notificationError) {
 				console.error('Failed to create notification:', notificationError);
+				// Don't fail the main operation if notification fails
+			}
+		}
+
+		// Send notification to admins when vendor updates their entry
+		if (isOwner && (price !== undefined || unit !== undefined)) {
+			try {
+				// Get all admin users
+				const admins = await prisma.user.findMany({
+					where: { role: 'ADMIN' },
+					select: { id: true }
+				});
+
+				const notificationData = {
+					priceEntryId: updatedEntry.id,
+					productName: updatedEntry.product.name,
+					marketName: updatedEntry.market.name,
+					price: updatedEntry.price,
+					unit: updatedEntry.unit,
+					vendorName: updatedEntry.user?.name || 'Unknown'
+				};
+
+				const title = '📝 Price Entry Updated';
+				const message = `${notificationData.vendorName} has updated their price entry for ${notificationData.productName} at ${notificationData.marketName}. New price: ₦${notificationData.price.toLocaleString()} per ${notificationData.unit}. Please review.`;
+
+				// Create notifications for all admins
+				for (const admin of admins) {
+					await (prisma as any).notification.create({
+						data: {
+							userId: admin.id,
+							type: 'price_updated',
+							title,
+							message,
+							data: notificationData
+						}
+					});
+				}
+			} catch (notificationError) {
+				console.error('Failed to create admin notification:', notificationError);
 				// Don't fail the main operation if notification fails
 			}
 		}

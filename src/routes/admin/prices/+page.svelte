@@ -448,6 +448,11 @@
 										<td class="px-6 py-4 whitespace-nowrap">
 											<div class="text-lg font-bold text-blue-600">{formatPrice(entry.price)}</div>
 											<div class="text-sm text-gray-500">per {entry.unit}</div>
+											{#if entry.updatedAt && new Date(entry.updatedAt).getTime() > new Date(entry.createdAt).getTime()}
+												<div class="text-xs text-orange-600 font-medium mt-1">
+													📝 Updated by vendor
+												</div>
+											{/if}
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap">
 											<div class="flex items-center">
