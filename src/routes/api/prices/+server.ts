@@ -30,8 +30,16 @@ export const GET = async ({ url, cookies }: RequestEvent) => {
 				where.status = status;
 			}
 			// If status is 'ALL' or not provided for admin, don't filter by status
+		} else if (payload?.role === 'VENDOR' && payload?.userId) {
+			// Vendors can see:
+			// 1. All APPROVED entries (public)
+			// 2. Their own entries regardless of status
+			where.OR = [
+				{ status: 'APPROVED' },
+				{ submittedBy: payload.userId }
+			];
 		} else {
-			// Non-admin users only see approved entries
+			// Non-authenticated users and regular users only see approved entries
 			where.status = 'APPROVED';
 		}
 
@@ -159,7 +167,7 @@ export const POST = async ({ request, cookies }: RequestEvent) => {
 		});
 
 		const body = await request.json();
-		const { productId, marketId, price, unit, notes, customProduct, customMarket } = body;
+		const { productId, marketId, price, unit, notes, customProduct, customMarket, isUpdate, originalEntryId } = body;
 
 		// Validation
 		if ((!productId && !customProduct) || (!marketId && !customMarket) || !price || !unit) {
@@ -174,6 +182,35 @@ export const POST = async ({ request, cookies }: RequestEvent) => {
 				{ success: false, error: 'Price must be greater than 0' },
 				{ status: 400 }
 			);
+		}
+
+		// If this is an update from vendor, verify they own the original entry
+		if (isUpdate && originalEntryId) {
+			const originalEntry = await prisma.priceEntry.findUnique({
+				where: { id: originalEntryId },
+				select: { submittedBy: true, status: true }
+			});
+
+			if (!originalEntry) {
+				return json(
+					{ success: false, error: 'Original entry not found' },
+					{ status: 404 }
+				);
+			}
+
+			if (originalEntry.submittedBy !== payload.userId) {
+				return json(
+					{ success: false, error: 'You can only update your own entries' },
+					{ status: 403 }
+				);
+			}
+
+			if (originalEntry.status !== 'APPROVED') {
+				return json(
+					{ success: false, error: 'You can only update approved entries' },
+					{ status: 400 }
+				);
+			}
 		}
 
 		let finalProductId = productId;
@@ -254,13 +291,22 @@ export const POST = async ({ request, cookies }: RequestEvent) => {
 		}
 
 		// Create price entry
+		let finalNotes = notes;
+		
+		// If this is an update, enhance the notes
+		if (isUpdate && originalEntryId) {
+			finalNotes = notes ? 
+				`Price update: ${notes}` : 
+				'Price update submitted by vendor';
+		}
+
 		const entry = await prisma.priceEntry.create({
 			data: {
 				productId: finalProductId,
 				marketId: finalMarketId,
 				price,
 				unit,
-				notes,
+				notes: finalNotes,
 				submittedBy: payload.userId,
 				status: currentUser.role === 'ADMIN' ? 'APPROVED' : 'PENDING'
 			},
@@ -281,10 +327,35 @@ export const POST = async ({ request, cookies }: RequestEvent) => {
 			}
 		});
 
+		// If this is an update, create a notification for admins
+		if (isUpdate && originalEntryId) {
+			try {
+				const admins = await prisma.user.findMany({
+					where: { role: 'ADMIN' },
+					select: { id: true }
+				});
+
+				for (const admin of admins) {
+					await prisma.notification.create({
+						data: {
+							userId: admin.id,
+							type: 'vendor_price_update',
+							title: 'Vendor Price Update',
+							message: `${entry.user.name} submitted an update for ${entry.product.name} at ${entry.market.name} (₦${entry.price.toLocaleString()})`,
+							read: false
+						}
+					});
+				}
+			} catch (notificationError) {
+				console.error('Failed to create admin notifications:', notificationError);
+				// Don't fail the entire request if notifications fail
+			}
+		}
+
 		return json({
 			success: true,
 			data: entry,
-			message: 'Price entry submitted successfully'
+			message: isUpdate ? 'Price update submitted successfully' : 'Price entry submitted successfully'
 		});
 	} catch (error) {
 		console.error('Price entry creation error:', error);

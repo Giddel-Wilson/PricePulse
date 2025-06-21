@@ -151,6 +151,18 @@
 		showEditModal = true;
 	}
 
+	function openUpdateModal(entry: any) {
+		// For updates, we create a new entry based on the approved one
+		editingEntry = entry;
+		editForm = {
+			price: entry.price.toString(),
+			unit: entry.unit,
+			notes: '' // Clear notes for update reason
+		};
+		editErrors = {};
+		showEditModal = true;
+	}
+
 	function closeEditModal() {
 		showEditModal = false;
 		editingEntry = null;
@@ -166,8 +178,10 @@
 		if (!editForm.price || isNaN(Number(editForm.price)) || Number(editForm.price) <= 0) {
 			editErrors.price = 'Valid price is required';
 		}
-		if (!editForm.unit) {
+		if (!editForm.unit || editForm.unit.trim().length === 0) {
 			editErrors.unit = 'Unit is required';
+		} else if (editForm.unit.trim().length < 2) {
+			editErrors.unit = 'Unit must be at least 2 characters';
 		}
 
 		if (Object.keys(editErrors).length > 0) {
@@ -177,22 +191,47 @@
 		try {
 			isUpdating = true;
 
-			const response = await fetch(`/api/prices/${editingEntry.id}`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					price: Number(editForm.price),
-					unit: editForm.unit,
-					notes: editForm.notes || null
-				})
-			});
+			let response;
+			let successMessage;
+
+			if (editingEntry.status === 'APPROVED') {
+				// For APPROVED entries, create a new entry (update)
+				response = await fetch('/api/prices', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						productId: editingEntry.productId,
+						marketId: editingEntry.marketId,
+						price: Number(editForm.price),
+						unit: editForm.unit,
+						notes: editForm.notes || 'Price update from vendor',
+						isUpdate: true,
+						originalEntryId: editingEntry.id
+					})
+				});
+				successMessage = 'Price update submitted successfully! It will be reviewed by an admin.';
+			} else {
+				// For PENDING/REJECTED entries, update the existing entry
+				response = await fetch(`/api/prices/${editingEntry.id}`, {
+					method: 'PATCH',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						price: Number(editForm.price),
+						unit: editForm.unit,
+						notes: editForm.notes || null
+					})
+				});
+				successMessage = 'Price entry updated successfully! It will be reviewed by an admin.';
+			}
 
 			const result = await response.json();
 
 			if (result.success) {
-				notifications.success('Price entry updated successfully! It will be reviewed by an admin.');
+				notifications.success(successMessage);
 				closeEditModal();
 				await loadUserEntries(); // Reload entries
 			} else {
@@ -408,10 +447,27 @@
 													size="sm"
 													variant="outline"
 													onclick={() => openEditModal(entry)}
-													class="flex items-center space-x-1"
 												>
-													<Edit class="w-4 h-4" />
-													<span>Edit</span>
+													<Edit class="w-4 h-4 mr-1" />
+													Edit
+												</Button>
+											{:else if (entry as any).status === 'APPROVED'}
+												<Button
+													size="sm"
+													variant="outline"
+													onclick={() => openUpdateModal(entry)}
+												>
+													<Edit class="w-4 h-4 mr-1" />
+													Update
+												</Button>
+											{:else if (entry as any).status === 'REJECTED'}
+												<Button
+													size="sm"
+													variant="outline"
+													onclick={() => openEditModal(entry)}
+												>
+													<Edit class="w-4 h-4 mr-1" />
+													Edit
 												</Button>
 											{:else}
 												<span class="text-xs text-gray-400">Cannot edit</span>
@@ -516,7 +572,9 @@
 	<div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
 		<div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="text-lg font-medium text-gray-900">Edit Price Entry</h3>
+				<h3 class="text-lg font-medium text-gray-900">
+					{editingEntry?.status === 'APPROVED' ? 'Update Price Entry' : 'Edit Price Entry'}
+				</h3>
 				<button onclick={closeEditModal} class="text-gray-400 hover:text-gray-600">
 					<X class="w-6 h-6" />
 				</button>
@@ -530,6 +588,16 @@
 					<p class="text-sm text-gray-600">
 						<strong>Market:</strong> {editingEntry.market.name}
 					</p>
+					{#if editingEntry.status === 'APPROVED'}
+						<div class="mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
+							<p class="text-xs text-blue-700">
+								<strong>Current approved price:</strong> ₦{editingEntry.price.toLocaleString()} per {editingEntry.unit}
+							</p>
+							<p class="text-xs text-blue-600 mt-1">
+								Submitting an update will create a new entry for admin review.
+							</p>
+						</div>
+					{/if}
 				</div>
 
 				<form onsubmit={handleEditSubmit} class="space-y-4">
@@ -544,21 +612,69 @@
 						required
 					/>
 
-					<Select
-						label="Unit"
-						bind:value={editForm.unit}
-						error={editErrors.unit}
-						options={[
-							{ value: 'kg', label: 'per kg' },
-							{ value: 'ltr', label: 'per ltr' },
-							{ value: 'piece', label: 'per piece' },
-							{ value: 'bag', label: 'per bag' },
-							{ value: 'bundle', label: 'per bundle' },
-							{ value: 'carton', label: 'per carton' },
-							{ value: 'dozen', label: 'per dozen' }
-						]}
-						required
-					/>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-2">
+							Unit <span class="text-red-500">*</span>
+						</label>
+						<div class="space-y-2">
+							<!-- Predefined units -->
+							<div class="grid grid-cols-3 gap-1 text-xs">
+								{#each [
+									{ value: 'per kg', label: 'per kg' },
+									{ value: 'per ltr', label: 'per ltr' },
+									{ value: 'per piece', label: 'per piece' },
+									{ value: 'per bag', label: 'per bag' },
+									{ value: 'per bundle', label: 'per bundle' },
+									{ value: 'per carton', label: 'per carton' },
+									{ value: 'per dozen', label: 'per dozen' },
+									{ value: 'per basket', label: 'per basket' },
+									{ value: 'per ton', label: 'per ton' },
+									{ value: 'per box', label: 'per box' },
+									{ value: 'per gallon', label: 'per gallon' },
+									{ value: 'per yard', label: 'per yard' },
+									{ value: 'per meter', label: 'per meter' },
+									{ value: 'per roll', label: 'per roll' },
+									{ value: 'per pack', label: 'per pack' },
+									{ value: 'per tuber', label: 'per tuber' }
+								] as unitOption}
+									<button
+										type="button"
+										class="px-2 py-1 text-xs border rounded hover:bg-gray-50 {editForm.unit === unitOption.value ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-300 text-gray-700'}"
+										onclick={() => editForm.unit = unitOption.value}
+									>
+										{unitOption.label}
+									</button>
+								{/each}
+							</div>
+							
+							<!-- Custom unit input -->
+							<div class="mt-3">
+								<div class="flex items-center justify-between mb-1">
+									<label class="block text-xs text-gray-600">Or enter custom unit:</label>
+									{#if editForm.unit && !['per kg', 'per ltr', 'per piece', 'per bag', 'per bundle', 'per carton', 'per dozen', 'per basket', 'per ton', 'per box', 'per gallon', 'per yard', 'per meter', 'per roll', 'per pack', 'per tuber'].includes(editForm.unit)}
+										<button
+											type="button"
+											onclick={() => editForm.unit = ''}
+											class="text-xs text-gray-500 hover:text-gray-700"
+										>
+											Clear custom
+										</button>
+									{/if}
+								</div>
+								<Input
+									placeholder="e.g., per sack, per crate, per length, per bag (50kg)..."
+									bind:value={editForm.unit}
+									error={editErrors.unit}
+								/>
+								<p class="mt-1 text-xs text-gray-500">
+									💡 You can specify size/weight in parentheses, e.g., "per bag (50kg)"
+								</p>
+							</div>
+						</div>
+						{#if editErrors.unit}
+							<p class="mt-1 text-sm text-red-600">{editErrors.unit}</p>
+						{/if}
+					</div>
 
 					<Input
 						label="Notes (Optional)"
@@ -579,7 +695,7 @@
 							type="submit"
 							loading={isUpdating}
 						>
-							Update Price
+							{editingEntry?.status === 'APPROVED' ? 'Submit Update' : 'Update Price'}
 						</Button>
 					</div>
 				</form>
