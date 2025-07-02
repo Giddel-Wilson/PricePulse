@@ -49,7 +49,8 @@ export const GET = async ({ url, cookies }: RequestEvent) => {
 			
 			if (productName) {
 				where.product.name = {
-					contains: productName
+					contains: productName,
+					mode: 'insensitive'
 				};
 			}
 			
@@ -65,7 +66,8 @@ export const GET = async ({ url, cookies }: RequestEvent) => {
 			// Only filter by region if no specific market is selected
 			where.market = {
 				region: {
-					contains: region
+					contains: region,
+					mode: 'insensitive'
 				}
 			};
 		}
